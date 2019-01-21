@@ -24,6 +24,7 @@
 #include <sys/socket.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
+#include <bluetooth/sdp.h>
 #include <bluetooth/hci.h>
 #include <bluetooth/hci_lib.h>
 #include <string.h>
@@ -150,9 +151,10 @@ DEVICE_MOGAPRO,
 DEVICE_MOGAPRO2, // Moga Pro Power
 DEVICE_BGP100,
 DEVICE_ICONTROLPAD,
+DEVICE_STRATUS,
 DEVICE_COUNT
 };
-char *szDeviceNames[] = {"Zeemote JS1", "Zeemote: SteelSeries FREE", "BD&A", "Moga 2", "Moga Pro", "Moga Pro 2", "GAMEPAD", "iControlPad",NULL};
+char *szDeviceNames[] = {"Zeemote JS1", "Zeemote: SteelSeries FREE", "BD&A", "Moga 2", "Moga Pro", "Moga Pro 2", "GAMEPAD", "iControlPad","SteelSeries Stratus", NULL};
 char *szModeNames[] = {"Mouse","Joystick","Mouse+Joystick",NULL};
 pthread_t tinfo;
 
@@ -668,6 +670,7 @@ char szFileName[256];
 struct sockaddr_rc loc_addr = {0};
 struct sockaddr_rc rem_addr = {0};
 int theSocket;
+int sdpSocket;
 int iCursorSpeed = 3; // default cursor movement speed when direction held
 
 void zm_bt_close(void);
@@ -1762,7 +1765,11 @@ int zm_bt_connect(void)
   ret = 0;
   iDeviceType = zm_find_device_type(szDeviceName[iDevice]);
   str2ba(szDeviceAddr[iDevice], &rem_addr.rc_bdaddr);
-  theSocket = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);  
+  // Negotiate SDP before RFCOMM
+  //sdpSocket = socket(AF_BLUETOOTH, SOCK_STREAM );
+
+
+  theSocket = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
   lm |= RFCOMM_LM_TRUSTED;
 //  i = setsockopt(theSocket, SOL_RFCOMM, RFCOMM_LM, &lm, sizeof(lm));
 //  g_print("setsockopt returned %d\n", i);
@@ -1771,6 +1778,8 @@ int zm_bt_connect(void)
   rem_addr.rc_channel = 1;
   g_print("connecting to %s / %s\n", szDeviceName[iDevice], szDeviceAddr[iDevice]);
   i = connect(theSocket, (struct sockaddr *)&rem_addr, sizeof(rem_addr));
+  // Also connect to HID-Control
+
   if (i == 0)
   {
      struct timeval tv;
@@ -1789,13 +1798,30 @@ int zm_bt_connect(void)
        }
        if (iDeviceType == DEVICE_ICONTROLPAD)
        {
-       unsigned char Bytes[2];
-       Bytes[0] = 0xad;
-       Bytes[1] = 0x01; // set autonomous mode on
-       send(theSocket, (const char *)&Bytes[0], 2, 0); 
-       i = recv(theSocket, (char *)Bytes, 1, 0); // read the response
-       if (i != 1 || Bytes[0] != 0x80) // something went wrong
-          g_print("Failed to initialize the iControlPad\n");
+			unsigned char Bytes[2];
+			Bytes[0] = 0xad;
+			Bytes[1] = 0x01; // set autonomous mode on
+			send(theSocket, (const char *)&Bytes[0], 2, 0); 
+			i = recv(theSocket, (char *)Bytes, 1, 0); // read the response
+			if (i != 1 || Bytes[0] != 0x80) // something went wrong
+				g_print("Failed to initialize the iControlPad\n");
+       }
+	   if (iDeviceType == DEVICE_STRATUS)
+       {
+		   g_print("Sending handshake to Stratus\n");
+			unsigned char Bytes[6];
+			i = recv(theSocket, (char *)Bytes, 6, 0); // Read
+			if (i < 4) // something went wrong
+				g_print("Failed to initialize the Stratus\n");
+			// Send initialization
+			Bytes[0] = 0xff; // set autonomous mode on
+			Bytes[1] = 0x55;
+			Bytes[2] = 0x02; // set autonomous mode on
+			Bytes[3] = 0x00;
+			Bytes[4] = 0xee; // set autonomous mode on
+			Bytes[5] = 0x10;
+			send(theSocket, (const char *)&Bytes[0], 6, 0);
+			
        }
   }
   else
