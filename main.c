@@ -158,6 +158,20 @@ char *szDeviceNames[] = {"Zeemote JS1", "Zeemote: SteelSeries FREE", "BD&A", "Mo
 char *szModeNames[] = {"Mouse","Joystick","Mouse+Joystick",NULL};
 pthread_t tinfo;
 
+unsigned char STRATUS_INIT[] = { 0xff, 0x55, 0x02, 0x00, 0xee, 0x10 };
+
+const unsigned char STRATUS_HANDSHAKE[] = {
+	0xff, 0x5a, 0x00, 0x1a, 0xc0, 0x4b, 0x40, 0x00, 0x42, 0x01, 0x7f, 0xff, 0xff, 0x05, 0xdc, 
+	0x00, 0x48, 0x1e, 0x03, 0x0a, 0x00, 0x01, 0x0b, 0x02, 0x01, 0x1f};
+
+unsigned char STRATUS_CONFIGURE[] = {
+
+};
+
+unsigned char STRATUS_HEARTBEAT[] = {
+
+};
+
 // Stick the PNG icon image in main.c to simplify building/distributing
 // the executable as a single file. This allows the app to show its icon
 // when running without having to "install" it.
@@ -1809,7 +1823,7 @@ int zm_bt_connect(void)
 	   if (iDeviceType == DEVICE_STRATUS)
        {
 		   g_print("Sending handshake to Stratus\n");
-			unsigned char Bytes[6];
+			unsigned char Bytes[100];
 			i = recv(theSocket, (char *)Bytes, 6, 0); // Read
 			if (i < 4) // something went wrong
 				g_print("Failed to initialize the Stratus\n");
@@ -1821,7 +1835,89 @@ int zm_bt_connect(void)
 			Bytes[4] = 0xee; // set autonomous mode on
 			Bytes[5] = 0x10;
 			send(theSocket, (const char *)&Bytes[0], 6, 0);
+
+			i = recv(theSocket, (char *)Bytes, 14, 0); // Read
+			i = recv(theSocket, (char *)Bytes, 16, 0); // Read
+			if (i < 4) // something went wrong
+				g_print("Failed to initialize the Stratus\n");
+			// Should respond with ff 5a 00 1a 80 40 00 00 cd
+			// Should respond with 7-16 bits??? 01 05 08 00 05 dc 00 48 1e 03 0a 00 01 0b 02 01 8f
+
+			g_print("Sending agreement to Stratus\n");
+			// Send ??? (25 bytes)
+			// ff 5a 00 1a c0 ?? 40 00 ?? 01 7f ff ff 05 dc 00 48 1e 03 0a 00 01 0b 02 01 1f
+			// left 2d 60
+			// right 4b 42
+			Bytes[0] = 0xff;
+			Bytes[1] = 0x5a;
+			Bytes[2] = 0x00;
+			Bytes[3] = 0x1a;
+			Bytes[4] = 0xc0;
+			Bytes[5] = 0x4b; // ??
+			Bytes[6] = 0x40;
+			Bytes[7] = 0x00;
+			Bytes[8] = 0x42; // ??
+			Bytes[9] = 0x01;
+			Bytes[10] = 0x7f;
+			Bytes[11] = 0xff;
+			Bytes[12] = 0xff;
+			Bytes[13] = 0x05;
+			Bytes[14] = 0xdc;
+			Bytes[15] = 0x00;
+			Bytes[16] = 0x48;
+			Bytes[17] = 0x1e;
+			Bytes[18] = 0x03;
+			Bytes[19] = 0x0a;
+			Bytes[20] = 0x00;
+			Bytes[21] = 0x01;
+			Bytes[22] = 0x0b;
+			Bytes[23] = 0x02;
+			Bytes[24] = 0x01;
+			Bytes[25] = 0x1f;
+			int loop = 0;
+			int loop2 = 0;
+			Bytes[5] = 0;
+			Bytes[8] = 0;
+			for(loop = 0; loop<255; loop++) {
+				for(loop2 = 0; loop2<255; loop2++) {
+					send(theSocket, (const char *)&Bytes[0], 26, 0);
+					Bytes[8]++;
+					//sleep(0.1);
+					//g_print("Spamming\n");
+					//send(theSocket, (const char *)&STRATUS_HANDSHAKE, 26, 0);
+				}
+				send(theSocket, (const char *)&Bytes[0], 26, 0);
+				Bytes[5]++;
+
+			}
+			g_print("Spam Complete\n");
 			
+
+			// Respond with ff 5a 00 09 40 41 ?? ??
+			// left 2d 00 f0
+			// right 4b 00 d2
+			i = recv(theSocket, (char *)Bytes, 16, 0); // Read
+			i = recv(theSocket, (char *)Bytes, 16, 0); // Read
+
+			g_print("Requesting data from Stratus\n");
+			// Send ff 5a 00 10 40 4c 40 0a c1 40 40 00 06 aa 00 d0
+			Bytes[0] = 0xff;
+			Bytes[1] = 0x5a;
+			Bytes[2] = 0x00;
+			Bytes[3] = 0x10;
+			Bytes[4] = 0x40;
+			Bytes[5] = 0x4c; // Add 1
+			Bytes[6] = 0x40;
+			Bytes[7] = 0x0a;
+			Bytes[8] = 0xc2; // df, c1 Add 7F from byte 8
+			Bytes[9] = 0x40;
+			Bytes[10] = 0x40;
+			Bytes[11] = 0x00;
+			Bytes[12] = 0x06;
+			Bytes[13] = 0xaa;
+			Bytes[14] = 0x00;
+			Bytes[15] = 0xd0;
+			//send(theSocket, (const char *)&Bytes[0], 16, 0);
        }
   }
   else
